@@ -10,33 +10,20 @@ BASE_DIR = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else 
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 
 C = {
-    "bg":     "#FAFAFA",
-    "card":   "#FFFFFF",
-    "text":   "#262626",
-    "sub":    "#8E8E8E",
-    "border": "#DBDBDB",
-    "ok":     "#27AE60",
-    "err":    "#E74C3C",
-    # Instagram gradient stops
-    "g0": (0x83, 0x3A, 0xB4),  # purple
-    "g1": (0xC1, 0x35, 0x84),  # mid-pink
-    "g2": (0xE1, 0x30, 0x6C),  # red-pink
-    "g3": (0xF7, 0x77, 0x37),  # orange
+    "bg":       "#0B0F1A",
+    "header":   "#0D1520",
+    "card":     "#111827",
+    "card_hl":  "#141D30",
+    "border":   "#1C2A3A",
+    "cyan":     "#00D4FF",
+    "cyan_glow":"#003D52",
+    "text":     "#E2E8F0",
+    "sub":      "#64748B",
+    "ok":       "#10B981",
+    "err":      "#EF4444",
 }
 
-IG_STOPS = [C["g0"], C["g1"], C["g2"], C["g3"]]
-
-
-def _ig_color(t):
-    """t in [0,1] → Instagram gradient hex color"""
-    stops = IG_STOPS
-    t = max(0.0, min(1.0, t))
-    idx = t * (len(stops) - 1)
-    i = min(int(idx), len(stops) - 2)
-    frac = idx - i
-    r1, g1, b1 = stops[i]
-    r2, g2, b2 = stops[i + 1]
-    return f"#{int(r1+(r2-r1)*frac):02x}{int(g1+(g2-g1)*frac):02x}{int(b1+(b2-b1)*frac):02x}"
+FONT = "맑은 고딕"
 
 
 def is_admin():
@@ -71,94 +58,130 @@ def apply_profile(adapter, profile):
             raise RuntimeError(f"명령 실패:\n{cmd}\n\n{r.stderr or r.stdout}")
 
 
-# ── Gradient Canvas Button ─────────────────────────────────────────────────
-class GradButton(tk.Canvas):
-    W, H = 280, 48
+# ── Cyan Glow Button ───────────────────────────────────────────────────────
+class CyanBtn(tk.Canvas):
+    W, H = 72, 28
 
-    def __init__(self, parent, text, command, **kw):
+    def __init__(self, parent, text, command, card_bg=None, **kw):
+        self._card_bg = card_bg or C["card"]
         super().__init__(parent, width=self.W, height=self.H,
-                         highlightthickness=0, bg=C["bg"], cursor="hand2", **kw)
+                         highlightthickness=0, bg=self._card_bg, cursor="hand2", **kw)
         self._text = text
         self._cmd = command
         self._enabled = True
+        self._hover = False
+        self._filled = False
         self._render()
         self.bind("<Button-1>", lambda e: self._enabled and self._cmd())
-        self.bind("<Enter>",    lambda e: self._enabled and self._render(hover=True))
-        self.bind("<Leave>",    lambda e: self._enabled and self._render(hover=False))
+        self.bind("<Enter>",    lambda e: self._on_hover(True))
+        self.bind("<Leave>",    lambda e: self._on_hover(False))
 
-    def _render(self, hover=False, disabled=False):
-        self.delete("all")
-        for x in range(self.W):
-            t = x / self.W
-            if disabled:
-                color = "#CCCCCC"
-            else:
-                r1, g1, b1 = [int(c, 16) for c in [_ig_color(t)[1:3], _ig_color(t)[3:5], _ig_color(t)[5:7]]]
-                if hover:
-                    r1 = min(255, int(r1 * 1.12))
-                    g1 = min(255, int(g1 * 1.12))
-                    b1 = min(255, int(b1 * 1.12))
-                color = f"#{r1:02x}{g1:02x}{b1:02x}"
-            self.create_line(x, 0, x, self.H, fill=color)
-        fg = "#AAAAAA" if disabled else "white"
-        self.create_text(self.W // 2, self.H // 2, text=self._text,
-                         fill=fg, font=("Segoe UI", 11, "bold"))
-
-    def set_enabled(self, val):
-        self._enabled = val
-        self._render(disabled=not val)
-        if not val:
-            self.unbind("<Enter>")
-            self.unbind("<Leave>")
-        else:
-            self.bind("<Enter>", lambda e: self._render(hover=True))
-            self.bind("<Leave>", lambda e: self._render(hover=False))
-
-
-# ── Profile Tab Button ─────────────────────────────────────────────────────
-class TabBtn(tk.Canvas):
-    H = 36
-
-    def __init__(self, parent, text, command, **kw):
-        self._text = text
-        self._cmd = command
-        self._active = False
-        w = max(80, len(text) * 14 + 24)
-        super().__init__(parent, width=w, height=self.H,
-                         highlightthickness=0, bg=C["bg"], cursor="hand2", **kw)
-        self._width = w
-        self._render()
-        self.bind("<Button-1>", lambda e: self._cmd())
+    def _on_hover(self, val):
+        if self._enabled and not self._filled:
+            self._hover = val
+            self._render()
 
     def _render(self):
         self.delete("all")
-        if self._active:
-            for x in range(self._width):
-                self.create_line(x, 0, x, self.H, fill=_ig_color(x / self._width))
-            fg = "white"
+        if not self._enabled:
+            self.create_rectangle(1, 1, self.W-1, self.H-1, fill="", outline=C["sub"], width=1)
+            self.create_text(self.W//2, self.H//2, text=self._text,
+                             fill=C["sub"], font=(FONT, 8))
+            return
+        if self._filled or self._hover:
+            # filled cyan
+            self.create_rectangle(0, 0, self.W, self.H, fill=C["cyan_glow"], outline="")
+            self.create_rectangle(1, 1, self.W-1, self.H-1, fill=C["cyan"], outline="")
+            self.create_text(self.W//2, self.H//2, text=self._text,
+                             fill="#0B0F1A", font=(FONT, 8, "bold"))
         else:
-            self.create_rectangle(0, 0, self._width, self.H, fill=C["border"], outline="")
-            fg = C["sub"]
-        self.create_text(self._width // 2, self.H // 2, text=self._text,
-                         fill=fg, font=("Segoe UI", 10, "bold" if self._active else "normal"))
+            # glow outline
+            self.create_rectangle(0, 0, self.W, self.H, fill=C["cyan_glow"], outline="")
+            self.create_rectangle(1, 1, self.W-1, self.H-1, fill=self._card_bg, outline=C["cyan"], width=1)
+            self.create_text(self.W//2, self.H//2, text=self._text,
+                             fill=C["cyan"], font=(FONT, 8, "bold"))
 
-    def set_active(self, val):
-        self._active = val
+    def set_filled(self, val):
+        self._filled = val
+        self._render()
+
+    def set_enabled(self, val):
+        self._enabled = val
+        self._render()
+
+    def update_bg(self, bg):
+        self._card_bg = bg
+        self.config(bg=bg)
         self._render()
 
 
-# ── Field Row in Info Card ─────────────────────────────────────────────────
-class FieldRow(tk.Frame):
-    def __init__(self, parent, label, **kw):
-        super().__init__(parent, bg=C["card"], **kw)
-        tk.Label(self, text=label, width=7, anchor="w",
-                 bg=C["card"], fg=C["sub"], font=("Segoe UI", 9)).pack(side="left")
-        self._val = tk.Label(self, text="", anchor="w",
-                             bg=C["card"], fg=C["text"], font=("Segoe UI", 11, "bold"))
-        self._val.pack(side="left")
+# ── Profile Card ───────────────────────────────────────────────────────────
+class ProfileCard(tk.Frame):
+    FIELDS = [("IP", "ip"), ("서브넷", "subnet"), ("게이트웨이", "gateway"), ("DNS", "dns")]
 
-    def set(self, text, dim=False):
-        self._val.config(text=text, fg=C["sub"] if dim else C["text"])
+    def __init__(self, parent, profile, on_activate, **kw):
+        super().__init__(parent, bg=C["card"],
+                         highlightbackground=C["border"], highlightthickness=1, **kw)
+        self._bg = C["card"]
+        self._profile = profile
+        self._all_widgets = []
+
+        inner = tk.Frame(self, bg=self._bg, padx=16, pady=12)
+        inner.pack(fill="both", expand=True)
+        self._all_widgets.append(inner)
+
+        # ── Top row: name + button ──────────────────────────
+        top = tk.Frame(inner, bg=self._bg)
+        top.pack(fill="x", pady=(0, 10))
+        self._all_widgets.append(top)
+
+        self._name = tk.Label(top, text=profile["name"], bg=self._bg, fg=C["text"],
+                              font=(FONT, 11, "bold"), anchor="w")
+        self._name.pack(side="left")
+        self._all_widgets.append(self._name)
+
+        self._btn = CyanBtn(top, "활성화", on_activate, card_bg=self._bg)
+        self._btn.pack(side="right")
+
+        # ── Separator ───────────────────────────────────────
+        sep = tk.Frame(inner, bg=C["border"], height=1)
+        sep.pack(fill="x", pady=(0, 10))
+
+        # ── Info grid (2 columns) ───────────────────────────
+        grid = tk.Frame(inner, bg=self._bg)
+        grid.pack(fill="x")
+        self._all_widgets.append(grid)
+
+        fields = list(self.FIELDS)
+        if profile.get("dns2"):
+            fields.append(("DNS 2", "dns2"))
+
+        for i, (label, key) in enumerate(fields):
+            col = (i % 2) * 3
+            row = i // 2
+            lbl = tk.Label(grid, text=label, bg=self._bg, fg=C["sub"],
+                           font=(FONT, 8), anchor="w", width=7)
+            lbl.grid(row=row, column=col, sticky="w", pady=2)
+            val = tk.Label(grid, text=profile.get(key, ""), bg=self._bg, fg=C["text"],
+                           font=(FONT, 9, "bold"), anchor="w")
+            val.grid(row=row, column=col+1, sticky="w", padx=(0, 24), pady=2)
+            self._all_widgets += [lbl, val]
+
+    def set_active(self, val):
+        bg = C["card_hl"] if val else C["card"]
+        border = C["cyan"] if val else C["border"]
+        self._bg = bg
+        self.config(bg=bg, highlightbackground=border)
+        for w in self._all_widgets:
+            try:
+                w.config(bg=bg)
+            except Exception:
+                pass
+        self._btn.update_bg(bg)
+        self._btn.set_filled(val)
+
+    def set_btn_enabled(self, val):
+        self._btn.set_enabled(val)
 
 
 # ── Main App ───────────────────────────────────────────────────────────────
@@ -168,123 +191,83 @@ class App(tk.Tk):
         self.config_data = config
         self.adapter = config.get("adapter", "이더넷")
         self.profiles = config.get("profiles", [])
-        self.sel = 0
+
+        n = len(self.profiles)
+        card_h = 130 + (20 if any(p.get("dns2") for p in self.profiles) else 0)
+        h = min(58 + 16 + n * (card_h + 10) + 16 + 32, 680)
 
         self.title("NetSwitcher")
-        self.geometry("360x520")
+        self.geometry(f"460x{h}")
         self.resizable(False, False)
         self.configure(bg=C["bg"])
         self._build()
-        self._select(0)
 
     def _build(self):
-        # ── Gradient Header ──────────────────────────────────────
-        hdr = tk.Canvas(self, width=360, height=72, highlightthickness=0)
+        # ── Header ──────────────────────────────────────────────────
+        hdr = tk.Frame(self, bg=C["header"], height=56)
         hdr.pack(fill="x")
-        for x in range(360):
-            hdr.create_line(x, 0, x, 72, fill=_ig_color(x / 360))
-        hdr.create_text(180, 36, text="NetSwitcher",
-                        fill="white", font=("Segoe UI", 18, "bold"))
+        hdr.pack_propagate(False)
 
-        # ── Adapter chip ─────────────────────────────────────────
-        chip_frame = tk.Frame(self, bg=C["bg"])
-        chip_frame.pack(pady=(12, 0))
-        tk.Label(chip_frame, text="어댑터", bg=C["bg"],
-                 fg=C["sub"], font=("Segoe UI", 8)).pack(side="left", padx=(0, 4))
-        chip = tk.Label(chip_frame, text=self.adapter,
-                        bg=C["border"], fg=C["text"],
-                        font=("Segoe UI", 9, "bold"), padx=8, pady=2)
-        chip.pack(side="left")
+        tk.Label(hdr, text="NetSwitcher", bg=C["header"], fg=C["cyan"],
+                 font=(FONT, 14, "bold")).pack(side="left", padx=20, pady=14)
 
-        # ── Profile Tab Buttons ───────────────────────────────────
-        tab_wrap = tk.Frame(self, bg=C["bg"])
-        tab_wrap.pack(pady=14, padx=20, fill="x")
-        self.tabs = []
+        tk.Label(hdr, text=f"  {self.adapter}  ", bg=C["border"], fg=C["sub"],
+                 font=(FONT, 8), padx=2, pady=2).pack(side="right", padx=16, pady=16)
+
+        # cyan accent line
+        tk.Frame(self, bg=C["cyan"], height=2).pack(fill="x")
+
+        # ── Profile Cards ────────────────────────────────────────────
+        body = tk.Frame(self, bg=C["bg"])
+        body.pack(fill="both", expand=True, padx=14, pady=14)
+
+        self._cards = []
         for i, p in enumerate(self.profiles):
-            def _cmd(idx=i): self._select(idx)
-            t = TabBtn(tab_wrap, p["name"], _cmd)
-            t.pack(side="left", padx=4)
-            self.tabs.append(t)
+            def _activate(idx=i): self._on_activate(idx)
+            card = ProfileCard(body, p, _activate)
+            card.pack(fill="x", pady=(0, 8))
+            self._cards.append(card)
 
-        # ── Info Card ─────────────────────────────────────────────
-        outer = tk.Frame(self, bg=C["border"])
-        outer.pack(padx=20, fill="x", ipady=1, ipadx=1)
-        inner = tk.Frame(outer, bg=C["card"], padx=18, pady=14)
-        inner.pack(fill="both")
+        # ── Status Bar ───────────────────────────────────────────────
+        status = tk.Frame(self, bg=C["header"], height=30)
+        status.pack(fill="x", side="bottom")
+        status.pack_propagate(False)
+        self._status = tk.Label(status, text="●  준비", bg=C["header"],
+                                fg=C["sub"], font=(FONT, 8), anchor="w")
+        self._status.pack(side="left", padx=16)
 
-        self._name_lbl = tk.Label(inner, text="", anchor="w",
-                                  bg=C["card"], fg=C["text"],
-                                  font=("Segoe UI", 15, "bold"))
-        self._name_lbl.pack(fill="x", pady=(0, 10))
-
-        # gradient underline under name
-        uline = tk.Canvas(inner, width=280, height=2, highlightthickness=0, bg=C["card"])
-        uline.pack(fill="x", pady=(0, 10))
-        for x in range(320):
-            uline.create_line(x, 0, x, 2, fill=_ig_color(x / 320))
-
-        self._fields = {}
-        for key, label in [("ip", "IP"), ("subnet", "서브넷"), ("gateway", "게이트웨이"),
-                            ("dns", "DNS"), ("dns2", "DNS 2")]:
-            row = FieldRow(inner, label)
-            row.pack(fill="x", pady=3)
-            self._fields[key] = row
-
-        # ── Apply Button ──────────────────────────────────────────
-        btn_frame = tk.Frame(self, bg=C["bg"])
-        btn_frame.pack(pady=18)
-        self._apply_btn = GradButton(btn_frame, "적   용   하   기", self._on_apply)
-        self._apply_btn.pack()
-
-        # ── Status ────────────────────────────────────────────────
-        self._status_cv = tk.Canvas(self, width=300, height=22,
-                                    highlightthickness=0, bg=C["bg"])
-        self._status_cv.pack()
-        self._set_status("준비", C["sub"])
-
-    def _select(self, idx):
-        self.sel = idx
-        for i, t in enumerate(self.tabs):
-            t.set_active(i == idx)
+    def _on_activate(self, idx):
         p = self.profiles[idx]
-        self._name_lbl.config(text=p["name"])
-        self._fields["ip"].set(p.get("ip", ""))
-        self._fields["subnet"].set(p.get("subnet", ""))
-        self._fields["gateway"].set(p.get("gateway", ""))
-        self._fields["dns"].set(p.get("dns", ""))
-        dns2 = p.get("dns2", "")
-        self._fields["dns2"].set(dns2 if dns2 else "—", dim=not dns2)
-
-    def _set_status(self, text, color):
-        self._status_cv.delete("all")
-        self._status_cv.create_oval(4, 6, 14, 16, fill=color, outline="")
-        self._status_cv.create_text(20, 11, text=text, anchor="w",
-                                    fill=color, font=("Segoe UI", 9))
-
-    def _on_apply(self):
-        p = self.profiles[self.sel]
-        dns2_line = f"\nDNS 2   {p['dns2']}" if p.get("dns2") else ""
+        dns2_line = f"\nDNS 2     {p['dns2']}" if p.get("dns2") else ""
         msg = (f"'{p['name']}' 설정을 적용할까요?\n\n"
-               f"IP        {p['ip']}\n"
-               f"서브넷  {p['subnet']}\n"
-               f"GW       {p['gateway']}\n"
-               f"DNS     {p['dns']}{dns2_line}")
+               f"IP          {p['ip']}\n"
+               f"서브넷    {p['subnet']}\n"
+               f"게이트웨이  {p['gateway']}\n"
+               f"DNS       {p['dns']}{dns2_line}")
         if not messagebox.askyesno("네트워크 전환", msg, icon="question"):
             return
 
-        self._apply_btn.set_enabled(False)
-        self._set_status("적용 중...", _ig_color(0.5))
+        for card in self._cards:
+            card.set_btn_enabled(False)
+        self._set_status("●  적용 중...", C["cyan"])
         self.update()
 
         try:
             apply_profile(self.adapter, p)
-            self._set_status(f"✓  {p['name']} 적용 완료", C["ok"])
+            for i, card in enumerate(self._cards):
+                card.set_active(i == idx)
+                card.set_btn_enabled(True)
+            self._set_status(f"●  {p['name']} 적용 완료", C["ok"])
             messagebox.showinfo("완료", f"'{p['name']}' 설정이 적용되었습니다.")
         except RuntimeError as e:
-            self._set_status("✗  오류 발생", C["err"])
+            for card in self._cards:
+                card.set_active(False)
+                card.set_btn_enabled(True)
+            self._set_status("●  오류 발생", C["err"])
             messagebox.showerror("오류", str(e))
-        finally:
-            self._apply_btn.set_enabled(True)
+
+    def _set_status(self, text, color):
+        self._status.config(text=text, fg=color)
 
 
 if __name__ == "__main__":
