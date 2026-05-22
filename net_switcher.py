@@ -126,20 +126,20 @@ class TabBtn(tk.Canvas):
         w = max(80, len(text) * 14 + 24)
         super().__init__(parent, width=w, height=self.H,
                          highlightthickness=0, bg=C["bg"], cursor="hand2", **kw)
-        self._w = w
+        self._width = w
         self._render()
         self.bind("<Button-1>", lambda e: self._cmd())
 
     def _render(self):
         self.delete("all")
         if self._active:
-            for x in range(self._w):
-                self.create_line(x, 0, x, self.H, fill=_ig_color(x / self._w))
+            for x in range(self._width):
+                self.create_line(x, 0, x, self.H, fill=_ig_color(x / self._width))
             fg = "white"
         else:
-            self.create_rectangle(0, 0, self._w, self.H, fill=C["border"], outline="")
+            self.create_rectangle(0, 0, self._width, self.H, fill=C["border"], outline="")
             fg = C["sub"]
-        self.create_text(self._w // 2, self.H // 2, text=self._text,
+        self.create_text(self._width // 2, self.H // 2, text=self._text,
                          fill=fg, font=("Segoe UI", 10, "bold" if self._active else "normal"))
 
     def set_active(self, val):
